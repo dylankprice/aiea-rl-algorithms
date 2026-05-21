@@ -36,7 +36,7 @@ class Environments():
         for env_id in range(nb_actor):
             self.reset_env(env_id)
 
-    def len(self):
+    def __len__(self):
         return self.nb_actor
 
     def reset_env(self, env_id):
@@ -72,19 +72,19 @@ def PPO(envs, T=128, K=3, batch_size=32*8, gamma=0.99, device='cuda', gae_parame
         optimizer, start_factor=1., end_factor=0.0, total_iters=nb_iterations)
 
     max_reward = 0
-    total_rewards = [[] for _ in range(envs.len())]
-    smoothed_rewards = [[] for _ in range(envs.len())]
+    total_rewards = [[] for _ in range(len(envs))]
+    smoothed_rewards = [[] for _ in range(len(envs))]
 
     for iteration in tqdm(range(nb_iterations)):
-        advantages = torch.zeros((envs.len(), T), dtype=torch.float32, device=device)
-        buffer_states = torch.zeros((envs.len(), T, 4, 84, 84), dtype=torch.float32, device=device)
-        buffer_actions = torch.zeros((envs.len(), T), dtype=torch.long, device=device)
-        buffer_logprobs = torch.zeros((envs.len(), T), dtype=torch.float32, device=device)
-        buffer_state_values = torch.zeros((envs.len(), T+1), dtype=torch.float32, device=device)
-        buffer_rewards = torch.zeros((envs.len(), T), dtype=torch.float32, device=device)
-        buffer_is_terminal = torch.zeros((envs.len(), T), dtype=torch.float16, device=device)
+        advantages = torch.zeros((len(envs), T), dtype=torch.float32, device=device)
+        buffer_states = torch.zeros((len(envs), T, 4, 84, 84), dtype=torch.float32, device=device)
+        buffer_actions = torch.zeros((len(envs), T), dtype=torch.long, device=device)
+        buffer_logprobs = torch.zeros((len(envs), T), dtype=torch.float32, device=device)
+        buffer_state_values = torch.zeros((len(envs), T+1), dtype=torch.float32, device=device)
+        buffer_rewards = torch.zeros((len(envs), T), dtype=torch.float32, device=device)
+        buffer_is_terminal = torch.zeros((len(envs), T), dtype=torch.float16, device=device)
 
-        for env_id in range(envs.len()):
+        for env_id in range(len(envs)):
             with torch.no_grad():
                 for t in range(T):  # Run policy θ_old in environment for T timesteps
                     obs = torch.from_numpy(envs.observations[env_id] / 255.).unsqueeze(0).float().to(device)
