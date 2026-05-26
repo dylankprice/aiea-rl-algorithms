@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.tensorboard import SummaryWriter
+
 
 #PPO actor critic using equation 1 for actor and equation 9 for critic
 
@@ -22,7 +24,6 @@ class ActorCritic(nn.Module):
         self.critic = nn.Linear(256, 1)
 
     def forward(self, x):
-        h = self.head(x)
         return self.actor(h), self.critic(h)
 
 class Environments:
@@ -57,6 +58,7 @@ class Environments:
                        lap_complete_percent=0.95, domain_randomize=False, continuous=False)
         env = gym.wrappers.RecordEpisodeStatistics(env)   # This wrapper will keep track of cumulative rewards and episode lengths
         env = gym.wrappers.ResizeObservation(env, (84, 84))
+        env = gym.wrappers.GrayScaleObservation(env)        
         env = gym.wrappers.FrameStackObservation(env, 4)
         return env
 
@@ -72,15 +74,11 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
     scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer, start_factor=1., end_factor=0., total_iters=nb_iterations)
 
+    writer = SummaryWriter()
+    global_step = 0
     N = len(envs)
     max_reward = -np.inf
     episode_rewards = []
-
-    # added to see more how my model is learning
-
-    p_losses = []   
-    v_losses = []
-    entropies = []
 
 
     smoothed = []
@@ -181,9 +179,12 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 loss.backward() 
                 torch.nn.utils.clip_grad_norm_(actorcritic.parameters(), 0.5) 
                 optimizer.step() # update weights
-                p_losses.append(p_loss.item())
-                v_losses.append(v_loss.item())
-                entropies.append(dist.entropy().mean().item())
+                # remove p_losses, v_losses, entropies lists entirely
+                writer.add_scalar("Loss/policy", p_loss.item(), global_step)
+                writer.add_scalar("Loss/value", v_loss.item(), global_step)
+                writer.add_scalar("Loss/entropy", dist.entropy().mean().item(), global_step)
+                writer.add_scalar("Reward/mean", np.mean(episode_rewards), iteration)
+                global_step += 1
 
         scheduler.step() 
 
