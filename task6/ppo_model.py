@@ -148,7 +148,7 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
         loader = DataLoader(TensorDataset(flat_adv, flat_obs, flat_acts, flat_lps, flat_vals),
                             batch_size=batch_size, shuffle=True)
 
-        clip_eps = 0.1 * (1. - iteration / nb_iterations) 
+        clip_eps = 0.1 
 
         for _ in range(K):
             for b_adv, b_obs, b_act, b_old_lp, b_old_val in loader:
