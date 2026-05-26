@@ -58,7 +58,7 @@ class Environments:
                        lap_complete_percent=0.95, domain_randomize=False, continuous=False)
         env = gym.wrappers.RecordEpisodeStatistics(env)   # This wrapper will keep track of cumulative rewards and episode lengths
         env = gym.wrappers.ResizeObservation(env, (84, 84))
-        env = gym.wrappers.GrayScaleObservation(env)        
+        env = gym.wrappers.GrayscaleObservation(env)        
         env = gym.wrappers.FrameStackObservation(env, 4)
         return env
 
