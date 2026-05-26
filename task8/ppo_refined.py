@@ -5,7 +5,6 @@ import numpy as np
 from tqdm import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
@@ -16,9 +15,10 @@ class ActorCritic(nn.Module):
     def __init__(self, nb_actions):
         super().__init__()
         self.head = nn.Sequential(
-            nn.Conv2d(4, 16, 8, stride=4), nn.ReLU(),
-            nn.Conv2d(16, 32, 4, stride=2), nn.ReLU(),
-            nn.Flatten(), nn.Linear(2592, 256), nn.ReLU(),
+            nn.Conv2d(4, 32, 8, stride=4), nn.ReLU(),
+            nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),
+            nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),
+            nn.Flatten(), nn.Linear(3136, 256), nn.ReLU(),
         )
         self.actor = nn.Linear(256, nb_actions)
         self.critic = nn.Linear(256, 1)
@@ -27,6 +27,8 @@ class ActorCritic(nn.Module):
     def forward(self, x):
         h = self.head(x)
         return self.actor(h), self.critic(h)
+
+
 
 class Environments:
     def __init__(self, nb_actors):
@@ -68,22 +70,20 @@ class Environments:
 def obs_to_tensor(obs, device):
     return torch.from_numpy(np.array(obs) / 255.).float().unsqueeze(0).to(device)
 
+# Main PPO training loop implementing equations 7, 9, and 11-12 from the PPO paper
 
 def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
-        gae_lambda=0.95, vf_coeff=1.0, ent_coeff=0.01, nb_iterations=2000, device='cuda'):
+        gae_lambda=0.95, vf_coeff=1.0, ent_coeff=0.01, nb_iterations=5000, device='cuda'):
 
     optimizer = torch.optim.Adam(actorcritic.parameters(), lr=2.5e-4)
     scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer, start_factor=1., end_factor=0., total_iters=nb_iterations)
 
-    writer = SummaryWriter()
+    writer = SummaryWriter() # for TensorBoard logging
     global_step = 0
     N = len(envs)
     max_reward = -np.inf
     episode_rewards = []
-
-
-    smoothed = []
 
     for iteration in tqdm(range(nb_iterations)):
 
@@ -94,7 +94,8 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
         buf_vals   = torch.zeros((N, T+1), device=device)
         buf_rews   = torch.zeros((N, T), device=device)
         buf_dones  = torch.zeros((N, T), device=device)
-
+ 
+# Collect T steps of experience for each of the N parallel environments
         with torch.no_grad():
             for env_id in range(N):
                 for t in range(T):
@@ -124,7 +125,7 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 _, last_val = actorcritic(last_obs)
                 buf_vals[env_id, T] = last_val.squeeze()
 
-        
+        # Compute advantages using GAE (Generalized Advantage Estimation) from equations 11 and 12
         advantages = torch.zeros((N, T), device=device)
         with torch.no_grad():
             for env_id in range(N):
@@ -139,12 +140,17 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
 
                     advantages[env_id, t] = gae
 
-        
+        # Flatten the buffers to create a dataset for training
         flat_adv  = advantages.reshape(-1)
         flat_obs  = buf_obs.reshape(-1, 4, 84, 84)
         flat_acts = buf_acts.reshape(-1)
         flat_lps  = buf_lps.reshape(-1)
         flat_vals = buf_vals[:, :T].reshape(-1)
+
+        # Normalize advantages to have mean 0 and std 1 for better training stability
+        # This is added so a large spike in rewards doesn't cause huge policy updates that destabilize training in the gradients
+        flat_adv = (flat_adv - flat_adv.mean()) / (flat_adv.std() + 1e-8)
+
 
         loader = DataLoader(TensorDataset(flat_adv, flat_obs, flat_acts, flat_lps, flat_vals),
                             batch_size=batch_size, shuffle=True)
@@ -181,7 +187,6 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 loss.backward() 
                 torch.nn.utils.clip_grad_norm_(actorcritic.parameters(), 0.5) 
                 optimizer.step() # update weights
-                # remove p_losses, v_losses, entropies lists entirely
                 writer.add_scalar("Loss/policy", p_loss.item(), global_step)
                 writer.add_scalar("Loss/value", v_loss.item(), global_step)
                 writer.add_scalar("Loss/entropy", dist.entropy().mean().item(), global_step)
@@ -194,6 +199,6 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
 if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"device: {device}")
-    envs = Environments(nb_actors=2)
+    envs = Environments(nb_actors=8)
     actorcritic = ActorCritic(envs.envs[0].action_space.n).to(device)
     PPO(envs, actorcritic, device=device)

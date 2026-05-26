@@ -185,7 +185,6 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 loss.backward() 
                 torch.nn.utils.clip_grad_norm_(actorcritic.parameters(), 0.5) 
                 optimizer.step() # update weights
-                # remove p_losses, v_losses, entropies lists entirely
                 writer.add_scalar("Loss/policy", p_loss.item(), global_step)
                 writer.add_scalar("Loss/value", v_loss.item(), global_step)
                 writer.add_scalar("Loss/entropy", dist.entropy().mean().item(), global_step)
