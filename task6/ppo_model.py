@@ -1,6 +1,5 @@
 import gymnasium as gym
 import torch
-import random
 import numpy as np
 from tqdm import tqdm
 import torch.nn as nn
@@ -8,176 +7,193 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
 
-
+#PPO actor critic using equation 1 for actor and equation 9 for critic
 
 class ActorCritic(nn.Module):
     def __init__(self, nb_actions):
         super().__init__()
-        self.head = nn.Sequential(nn.Conv2d(4, 16, 8, stride=4), nn.Tanh(),
-                                  nn.Conv2d(16, 32, 4, stride=2), nn.Tanh(),
-                                  nn.Flatten(), nn.Linear(2592, 256), nn.Tanh(),)
-        self.actor = nn.Sequential(nn.Linear(256, nb_actions))
-        self.critic = nn.Sequential(nn.Linear(256, 1),)
+        self.head = nn.Sequential(
+            nn.Conv2d(4, 16, 8, stride=4), nn.ReLU(),
+            nn.Conv2d(16, 32, 4, stride=2), nn.ReLU(),
+            nn.Flatten(), nn.Linear(2592, 256), nn.ReLU(),
+        )
+        self.actor = nn.Linear(256, nb_actions)
+        self.critic = nn.Linear(256, 1)
 
     def forward(self, x):
         h = self.head(x)
         return self.actor(h), self.critic(h)
 
 
-class Environments():
-    def __init__(self, nb_actor):
-        self.envs = [self.get_env() for _ in range(nb_actor)]
-        self.observations = [None for _ in range(nb_actor)]
-        self.current_life = [None for _ in range(nb_actor)]
-        self.done = [False for _ in range(nb_actor)]
-        self.total_rewards = [0 for _ in range(nb_actor)]
-        self.nb_actor = nb_actor
-
-        for env_id in range(nb_actor):
-            self.reset_env(env_id)
+class Environments:
+    def __init__(self, nb_actors):
+        self.nb_actors = nb_actors
+        self.envs = [self._make_env() for _ in range(nb_actors)]
+        self.observations = [None] * nb_actors
+        self.done = [False] * nb_actors
+        self.total_rewards = [0.0] * nb_actors
+        for i in range(nb_actors):
+            self.reset_env(i)
 
     def __len__(self):
-        return self.nb_actor
+        return self.nb_actors
 
     def reset_env(self, env_id):
-        self.total_rewards[env_id] = 0
-        self.envs[env_id].reset()
+        self.total_rewards[env_id] = 0.0
+        obs, _ = self.envs[env_id].reset()
+        self.observations[env_id] = obs
+        self.done[env_id] = False
 
-        for _ in range(random.randint(1, 30)):  # Noop and fire to reset environment
-            self.observations[env_id], reward, _, _, info = self.envs[env_id].step(1)
-            self.total_rewards[env_id] += reward
- 
     def step(self, env_id, action):
-        next_obs, reward, terminated, truncated, info = self.envs[env_id].step(int(action))
+        obs, reward, terminated, truncated, info = self.envs[env_id].step(int(action))
         done = terminated or truncated
-        self.done[env_id] = done
         self.total_rewards[env_id] += reward
-        self.observations[env_id] = next_obs
-        return next_obs, reward, terminated, truncated, done, info
+        self.observations[env_id] = obs
+        self.done[env_id] = done
+        return obs, reward, done, info
 
-    def get_env(self):
-        env = gym.make("CarRacing-v3", render_mode="rgb_array", lap_complete_percent=0.95, domain_randomize=False, continuous=False)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
+    def _make_env(self):
+        env = gym.make("CarRacing-v3", render_mode="rgb_array",
+                       lap_complete_percent=0.95, domain_randomize=False, continuous=False)
+        env = gym.wrappers.RecordEpisodeStatistics(env)   # This wrapper will keep track of cumulative rewards and episode lengths
         env = gym.wrappers.ResizeObservation(env, (84, 84))
-        env = gym.wrappers.GrayscaleObservation(env)
         env = gym.wrappers.FrameStackObservation(env, 4)
         return env
 
 
-def PPO(envs, T=128, K=3, batch_size=32*8, gamma=0.99, device='cuda', gae_parameter=0.95,
-        vf_coeff_c1=1, ent_coef_c2=0.01, nb_iterations=2000):
+def obs_to_tensor(obs, device):
+    return torch.from_numpy(np.array(obs) / 255.).float().unsqueeze(0).to(device)
+
+
+def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
+        gae_lambda=0.95, vf_coeff=1.0, ent_coeff=0.01, nb_iterations=2000, device='cuda'):
 
     optimizer = torch.optim.Adam(actorcritic.parameters(), lr=2.5e-4)
     scheduler = torch.optim.lr_scheduler.LinearLR(
-        optimizer, start_factor=1., end_factor=0.0, total_iters=nb_iterations)
+        optimizer, start_factor=1., end_factor=0., total_iters=nb_iterations)
 
-    max_reward = 0
-    total_rewards = [[] for _ in range(len(envs))]
-    smoothed_rewards = [[] for _ in range(len(envs))]
+    N = len(envs)
+    max_reward = -np.inf
+    episode_rewards = []
+    smoothed = []
 
     for iteration in tqdm(range(nb_iterations)):
-        advantages = torch.zeros((len(envs), T), dtype=torch.float32, device=device)
-        buffer_states = torch.zeros((len(envs), T, 4, 84, 84), dtype=torch.float32, device=device)
-        buffer_actions = torch.zeros((len(envs), T), dtype=torch.long, device=device)
-        buffer_logprobs = torch.zeros((len(envs), T), dtype=torch.float32, device=device)
-        buffer_state_values = torch.zeros((len(envs), T+1), dtype=torch.float32, device=device)
-        buffer_rewards = torch.zeros((len(envs), T), dtype=torch.float32, device=device)
-        buffer_is_terminal = torch.zeros((len(envs), T), dtype=torch.float16, device=device)
 
-        for env_id in range(len(envs)):
-            with torch.no_grad():
-                for t in range(T):  # Run policy θ_old in environment for T timesteps
-                    obs = torch.from_numpy(envs.observations[env_id] / 255.).unsqueeze(0).float().to(device)
+        
+        buf_obs    = torch.zeros((N, T, 4, 84, 84), device=device)
+        buf_acts   = torch.zeros((N, T), dtype=torch.long, device=device)
+        buf_lps    = torch.zeros((N, T), device=device)
+        buf_vals   = torch.zeros((N, T+1), device=device)
+        buf_rews   = torch.zeros((N, T), device=device)
+        buf_dones  = torch.zeros((N, T), device=device)
+
+        with torch.no_grad():
+            for env_id in range(N):
+                for t in range(T):
+                    obs = obs_to_tensor(envs.observations[env_id], device)
                     logits, value = actorcritic(obs)
-                    logits, value = logits.squeeze(0), value.squeeze(0)
-                    m = torch.distributions.categorical.Categorical(logits=logits)
+                    dist = torch.distributions.Categorical(logits=logits.squeeze(0))
+                    action = dist.sample()
 
-                    action = m.sample()
-                    log_prob = m.log_prob(action)
-                    _, reward, terminated, truncated, done, _ = envs.step(env_id, action.item())
-                    reward = np.sign(reward)  # Reward clipping
+                    _, reward, done, _ = envs.step(env_id, action.item())
 
-                    buffer_states[env_id, t] = obs
-                    buffer_actions[env_id, t] = torch.tensor([action]).to(device)
-                    buffer_logprobs[env_id, t] = log_prob
-                    buffer_state_values[env_id, t] = value
-                    buffer_rewards[env_id, t] = reward
-                    buffer_is_terminal[env_id, t] = done
+                    buf_obs[env_id, t]   = obs.squeeze(0)
+                    buf_acts[env_id, t]  = action
+                    buf_lps[env_id, t]   = dist.log_prob(action)
+                    buf_vals[env_id, t]  = value.squeeze()
+                    buf_rews[env_id, t]  = np.sign(reward)  # reward clipping
+                    buf_dones[env_id, t] = float(done)
 
                     if done:
-                       total_rewards[env_id].append(envs.total_rewards[env_id])
-                       if envs.total_rewards[env_id] > max_reward:
-                           max_reward = envs.total_rewards[env_id]
-                           torch.save(actorcritic.state_dict(), f"actorcritic_{max_reward:.0f}.pt")
-                           envs.reset_env(env_id)
-                # Compute advantage estimates A^1; ... ; A^T
-                for t in range(T-1, -1, -1):
-                    next_non_terminal = 1.0 - buffer_is_terminal[env_id, t]
-                    delta_t = buffer_rewards[env_id, t] + gamma * buffer_state_values[
-                        env_id, t+1] * next_non_terminal - buffer_state_values[env_id, t]
-                    if t == (T-1):
-                        A_t = delta_t
-                    else:
-                        A_t = delta_t + gamma * gae_parameter * advantages[env_id, t+1] * next_non_terminal
-                    advantages[env_id, t] = A_t
+                        episode_rewards.append(envs.total_rewards[env_id])
+                        if envs.total_rewards[env_id] > max_reward:
+                            max_reward = envs.total_rewards[env_id]
+                            torch.save(actorcritic.state_dict(), f"actorcritic_{max_reward:.0f}.pt")
+                        envs.reset_env(env_id)
 
-        if (iteration % 400 == 0) and iteration > 0:
-            for env_id in range(len(envs)):
-                smoothed_rewards[env_id].append(np.mean(total_rewards[env_id]))
-                plt.plot(smoothed_rewards[env_id])
-            total_rewards = [[] for _ in range(len(envs))]
-            plt.title("Average Reward on Car Racing")
-            plt.xlabel("Training Epochs")
-            plt.ylabel("Average Reward per Episode")
-            plt.savefig('average_reward_on_breakout.png')
+                # bootstrap value for last state
+                last_obs = obs_to_tensor(envs.observations[env_id], device)
+                _, last_val = actorcritic(last_obs)
+                buf_vals[env_id, T] = last_val.squeeze()
+
+        
+        advantages = torch.zeros((N, T), device=device)
+        with torch.no_grad():
+            for env_id in range(N):
+                gae = 0.
+                for t in reversed(range(T)):
+                    not_done = 1. - buf_dones[env_id, t]
+
+                    #Equation 11 and 12 for 
+                    delta = buf_rews[env_id, t] + gamma * buf_vals[env_id, t+1] * not_done - buf_vals[env_id, t]
+                    gae = delta + gamma * gae_lambda * not_done * gae
+
+
+                    advantages[env_id, t] = gae
+
+        
+        flat_adv  = advantages.reshape(-1)
+        flat_obs  = buf_obs.reshape(-1, 4, 84, 84)
+        flat_acts = buf_acts.reshape(-1)
+        flat_lps  = buf_lps.reshape(-1)
+        flat_vals = buf_vals[:, :T].reshape(-1)
+
+        loader = DataLoader(TensorDataset(flat_adv, flat_obs, flat_acts, flat_lps, flat_vals),
+                            batch_size=batch_size, shuffle=True)
+
+        clip_eps = 0.1 * (1. - iteration / nb_iterations)  # anneal ε
+
+        for _ in range(K):
+            for b_adv, b_obs, b_act, b_old_lp, b_old_val in loader:
+                logits, value = actorcritic(b_obs)
+                value = value.squeeze(-1)
+                dist = torch.distributions.Categorical(logits=logits)
+                log_prob = dist.log_prob(b_act)
+
+                ratio = torch.exp(log_prob - b_old_lp)
+                returns = b_adv + b_old_val
+
+                # policy loss from equation 7
+                p_loss = -torch.min(
+                    ratio * b_adv,
+                    torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * b_adv
+                ).mean()
+
+                # value loss (clipped)
+                v_clipped = b_old_val + torch.clamp(value - b_old_val, -clip_eps, clip_eps)
+                v_loss = torch.max(
+                    F.mse_loss(returns, value, reduction='none'),
+                    F.mse_loss(returns, v_clipped, reduction='none')
+                ).mean()
+
+                # total loss from equation 9
+                loss = p_loss + vf_coeff * v_loss - ent_coeff * dist.entropy().mean()
+
+                optimizer.zero_grad() 
+                loss.backward() 
+                torch.nn.utils.clip_grad_norm_(actorcritic.parameters(), 0.5) 
+                optimizer.step() # update weights
+
+        scheduler.step() 
+
+        # this loop is used to track rewards and save checkpoints, not part of PPO algorithm, its done every 100 to see the progress
+        if iteration > 0 and iteration % 100 == 0 and episode_rewards:
+            smoothed.append(np.mean(episode_rewards))
+            episode_rewards = []
+            plt.figure()
+            plt.plot(smoothed)
+            plt.title("PPO on CarRacing-v3")
+            plt.xlabel("Checkpoint (every 100 iters)")
+            plt.ylabel("Mean Episode Reward")
+            plt.tight_layout()
+            plt.savefig("reward.png")
             plt.close()
-
-        for epoch in range(K):
-            advantages_data_loader = DataLoader(
-                TensorDataset(advantages.reshape(advantages.shape[0] * advantages.shape[1]),
-                              buffer_states.reshape(-1, buffer_states.shape[2], buffer_states.shape[3],
-                                                    buffer_states.shape[4]),
-                              buffer_actions.reshape(-1),
-                              buffer_logprobs.reshape(-1),
-                              buffer_state_values[:, :T].reshape(-1),),
-                batch_size=batch_size, shuffle=True,)
-
-            for batch_advantages in advantages_data_loader:
-                b_adv, obs, action_that_was_taken, old_log_prob, old_state_values = batch_advantages
-
-                logits, value = actorcritic(obs)
-                logits, value = logits.squeeze(0), value.squeeze(-1)
-                m = torch.distributions.categorical.Categorical(logits=logits)
-                log_prob = m.log_prob(action_that_was_taken)
-                ratio = torch.exp(log_prob - old_log_prob)
-                returns = b_adv + old_state_values
-
-                # clipped surrogate objective
-                policy_loss_1 = b_adv * ratio
-                alpha = 1. - iteration / nb_iterations
-                clip_range = 0.1 * alpha
-                policy_loss_2 = b_adv * torch.clamp(ratio, 1 - clip_range, 1 + clip_range)
-                policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
-
-                # clipped value loss; see https://arxiv.org/pdf/2005.12729
-                value_loss1 = F.mse_loss(returns, value, reduction='none')
-                value_loss2 = F.mse_loss(returns, torch.clamp(value, value - clip_range, value + clip_range),
-                                         reduction='none')
-                value_loss = torch.max(value_loss1, value_loss2).mean()
-
-                loss = policy_loss + ent_coef_c2 * -(m.entropy()).mean() + vf_coeff_c1 * value_loss
-
-                # θ_old <- θ
-                optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(actorcritic.parameters(), 0.5)
-                optimizer.step()
-        scheduler.step()
+            print(f"[{iteration}] mean reward: {smoothed[-1]:.1f}  best: {max_reward:.1f}")
 
 
 if __name__ == "__main__":
-    device = 'cuda'
-    nb_actor = 8
-    envs = Environments(nb_actor)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"device: {device}")
+    envs = Environments(nb_actors=2)
     actorcritic = ActorCritic(envs.envs[0].action_space.n).to(device)
-    PPO(envs, device=device)
+    PPO(envs, actorcritic, device=device)
