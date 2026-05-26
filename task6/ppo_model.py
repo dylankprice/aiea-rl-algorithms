@@ -28,6 +28,8 @@ class ActorCritic(nn.Module):
         h = self.head(x)
         return self.actor(h), self.critic(h)
 
+
+
 class Environments:
     def __init__(self, nb_actors):
         self.nb_actors = nb_actors
@@ -68,6 +70,7 @@ class Environments:
 def obs_to_tensor(obs, device):
     return torch.from_numpy(np.array(obs) / 255.).float().unsqueeze(0).to(device)
 
+# Main PPO training loop implementing equations 7, 9, and 11-12 from the PPO paper
 
 def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
         gae_lambda=0.95, vf_coeff=1.0, ent_coeff=0.01, nb_iterations=2000, device='cuda'):
@@ -76,14 +79,14 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
     scheduler = torch.optim.lr_scheduler.LinearLR(
         optimizer, start_factor=1., end_factor=0., total_iters=nb_iterations)
 
-    writer = SummaryWriter()
+    writer = SummaryWriter() # for TensorBoard logging
     global_step = 0
     N = len(envs)
     max_reward = -np.inf
     episode_rewards = []
 
 
-    smoothed = []
+    smoothed = [] 
 
     for iteration in tqdm(range(nb_iterations)):
 
@@ -94,7 +97,8 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
         buf_vals   = torch.zeros((N, T+1), device=device)
         buf_rews   = torch.zeros((N, T), device=device)
         buf_dones  = torch.zeros((N, T), device=device)
-
+ 
+# Collect T steps of experience for each of the N parallel environments
         with torch.no_grad():
             for env_id in range(N):
                 for t in range(T):
@@ -124,7 +128,7 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 _, last_val = actorcritic(last_obs)
                 buf_vals[env_id, T] = last_val.squeeze()
 
-        
+        # Compute advantages using GAE (Generalized Advantage Estimation) from equations 11 and 12
         advantages = torch.zeros((N, T), device=device)
         with torch.no_grad():
             for env_id in range(N):
@@ -139,7 +143,7 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
 
                     advantages[env_id, t] = gae
 
-        
+        # Flatten the buffers to create a dataset for training
         flat_adv  = advantages.reshape(-1)
         flat_obs  = buf_obs.reshape(-1, 4, 84, 84)
         flat_acts = buf_acts.reshape(-1)
