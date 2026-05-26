@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
-#PPO actor critic using equation 1 for actor and equation 9 for critic
 
 class ActorCritic(nn.Module):
     def __init__(self, nb_actions):
