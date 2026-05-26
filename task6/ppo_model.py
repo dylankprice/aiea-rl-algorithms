@@ -1,3 +1,4 @@
+
 import gymnasium as gym
 import torch
 import numpy as np
@@ -23,7 +24,6 @@ class ActorCritic(nn.Module):
     def forward(self, x):
         h = self.head(x)
         return self.actor(h), self.critic(h)
-
 
 class Environments:
     def __init__(self, nb_actors):
@@ -75,6 +75,14 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
     N = len(envs)
     max_reward = -np.inf
     episode_rewards = []
+
+    # added to see more how my model is learning
+
+    p_losses = []   
+    v_losses = []
+    entropies = []
+
+
     smoothed = []
 
     for iteration in tqdm(range(nb_iterations)):
@@ -173,6 +181,9 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 loss.backward() 
                 torch.nn.utils.clip_grad_norm_(actorcritic.parameters(), 0.5) 
                 optimizer.step() # update weights
+                p_losses.append(p_loss.item())
+                v_losses.append(v_loss.item())
+                entropies.append(dist.entropy().mean().item())
 
         scheduler.step() 
 
@@ -180,15 +191,25 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
         if iteration > 0 and iteration % 100 == 0 and episode_rewards:
             smoothed.append(np.mean(episode_rewards))
             episode_rewards = []
-            plt.figure()
-            plt.plot(smoothed)
-            plt.title("PPO on CarRacing-v3")
-            plt.xlabel("Checkpoint (every 100 iters)")
-            plt.ylabel("Mean Episode Reward")
+
+            fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+            
+            axes[0,0].plot(smoothed)
+            axes[0,0].set_title("Mean Episode Reward")
+            axes[0,0].set_xlabel("Checkpoint (every 100 iters)")
+            
+            axes[0,1].plot(p_losses)
+            axes[0,1].set_title("Policy Loss")
+            
+            axes[1,0].plot(v_losses)
+            axes[1,0].set_title("Value Loss")
+            
+            axes[1,1].plot(entropies)
+            axes[1,1].set_title("Entropy")
+            
             plt.tight_layout()
-            plt.savefig("reward.png")
+            plt.savefig("training_stats.png")
             plt.close()
-            print(f"[{iteration}] mean reward: {smoothed[-1]:.1f}  best: {max_reward:.1f}")
 
 
 if __name__ == "__main__":
