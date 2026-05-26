@@ -4,6 +4,7 @@ This is a repo for the aiea lab auditing rl tasks. Each task can be found in it'
 ## Task 5 Notes
 - Uses vee branch of carla gym
 - train.py and run.py can be found in task5/carla-gym-env/
+- stablebase.yml shows ennviroment used
 
 ## Task 6 Notes
 - ppo.model and reward.png are the relevant files in task 6
