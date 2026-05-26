@@ -23,6 +23,7 @@ class ActorCritic(nn.Module):
         self.actor = nn.Linear(256, nb_actions)
         self.critic = nn.Linear(256, 1)
 
+
     def forward(self, x):
         h = self.head(x)
         return self.actor(h), self.critic(h)
@@ -188,30 +189,6 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
                 global_step += 1
 
         scheduler.step() 
-
-        # this loop is used to track rewards and save checkpoints, not part of PPO algorithm, its done every 100 to see the progress
-        if iteration > 0 and iteration % 100 == 0 and episode_rewards:
-            smoothed.append(np.mean(episode_rewards))
-            episode_rewards = []
-
-            fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-            
-            axes[0,0].plot(smoothed)
-            axes[0,0].set_title("Mean Episode Reward")
-            axes[0,0].set_xlabel("Checkpoint (every 100 iters)")
-            
-            axes[0,1].plot(p_losses)
-            axes[0,1].set_title("Policy Loss")
-            
-            axes[1,0].plot(v_losses)
-            axes[1,0].set_title("Value Loss")
-            
-            axes[1,1].plot(entropies)
-            axes[1,1].set_title("Entropy")
-            
-            plt.tight_layout()
-            plt.savefig("training_stats.png")
-            plt.close()
 
 
 if __name__ == "__main__":
