@@ -2,9 +2,14 @@
 
 from collections import deque
 import random
-# ReplayBuffer class       ← stores experience tuples
-# select_action function   ← epsilon-greedy logic
- # train function           ← the main loop (Algorithm 1)
+import gymnasium as gym
+import torch
+import torch.nn.functional as F
+import numpy as np
+from model import DQNetwork
+from torch.utils.tensorboard import SummaryWriter
+
+
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -19,6 +24,10 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.buffer)
     
+
+def obs_to_tensor(obs, device):
+    return torch.from_numpy(np.array(obs) / 255.).float().unsqueeze(0).to(device)
+
 # randomly picks non greedy actions based on epsilon to ensure non determinstic behavior
 def select_action(state, network, epsilon, nb_actions, device):
     if random.random() < epsilon:
@@ -32,7 +41,86 @@ def select_action(state, network, epsilon, nb_actions, device):
     
 def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilon_start, epsilon_end, epsilon_decay, device):
     epsilon = epsilon_start
-    
-    for episode in nb_episodes:
+    nb_actions = env.action_space.n
 
+    optimizer = torch.optim.Adam(network.parameters(), lr=1e-4) # create optimizer for network parameters
+
+    writer = SummaryWriter()
+
+    global_step = 0
+    
+    for episode in range(nb_episodes):
+        obs, _ = env.reset() # reset env to get first observeration
+        state = obs_to_tensor(obs, device)  #preprocess obs to a tensor for network
+
+        episode_reward = 0 # track episode reward for logging
+         
+
+        for t in range(nb_steps):
+            action = select_action(state, network, epsilon, nb_actions, device)
+            obs, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+            next_state = obs_to_tensor(obs, device)
+            buffer.push(state, action, reward, next_state, done) # store experience in replay buffer
+            state = next_state
+
+            episode_reward += reward
+            global_step += 1
+
+
+
+
+            if len(buffer) >= batch_size:
+                minibatch = buffer.sample(batch_size)
+                states, actions, rewards, next_states, dones = zip(*minibatch)
+                states = torch.cat(states)
+                next_states = torch.cat(next_states)
+                rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+                dones = torch.tensor(dones, dtype = torch.float32).to(device)
+
+            
+                with torch.no_grad():
+                    y_j = rewards + gamma * torch.max(network(next_states), dim=1).values * (1 - dones)  #bellman eqeuation !
+
+                current_qs = network(states).gather(1, torch.LongTensor(actions).unsqueeze(1)) # get q values for all actions for the last state in the batch
+                loss = F.mse_loss(current_qs.squeeze(1), y_j) # compute loss between current q values and target q values
+                optimizer.zero_grad()
+                loss.backward() # backpropagate loss
+                optimizer.step() # update network parameters
+                writer.add_scalar("Loss/train", loss.item(), global_step)
+
+
+
+            epsilon = max(epsilon_end, epsilon * epsilon_decay) # epsilon annealing
         
+            writer.add_scalar("Epsilon", epsilon, global_step)
+
+        writer.add_scalar("Reward/episode", episode_reward, episode)
+
+    writer.close()
+
+
+
+
+if __name__ == "__main__":
+    env = gym.make("CarRacing-v3", render_mode="rgb_array", lap_complete_percent=0.95, domain_randomize=False, continuous=False)
+    env = gym.wrappers.RecordEpisodeStatistics(env)  
+    env = gym.wrappers.ResizeObservation(env, (84, 84))
+    env = gym.wrappers.GrayscaleObservation(env)        
+    env = gym.wrappers.FrameStackObservation(env, 4)
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    network = DQNetwork(env.action_space.n).to(device)
+
+    buffer = ReplayBuffer(capacity=1_000_000)
+
+    train(env, network, buffer, 
+        nb_episodes=1000,
+        nb_steps=10000,
+        batch_size=32,
+        gamma=0.99,
+        epsilon_start=1.0,
+        epsilon_end=0.1,
+        epsilon_decay=0.999995,
+        device=device)
