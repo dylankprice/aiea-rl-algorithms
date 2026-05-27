@@ -28,7 +28,7 @@ class ReplayBuffer:
 def obs_to_tensor(obs, device):
     return torch.from_numpy(np.array(obs) / 255.).float().unsqueeze(0).to(device)
 
-# randomly picks non greedy actions based on epsilon to ensure non determinstic behavior
+# randomly picks either greedy or non greedy based on epsilon
 def select_action(state, network, epsilon, nb_actions, device):
     if random.random() < epsilon:
         return random.randint(0, nb_actions - 1) 
@@ -42,19 +42,15 @@ def select_action(state, network, epsilon, nb_actions, device):
 def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilon_start, epsilon_end, epsilon_decay, device):
     epsilon = epsilon_start
     nb_actions = env.action_space.n
-
     optimizer = torch.optim.Adam(network.parameters(), lr=1e-4) # create optimizer for network parameters
-
     writer = SummaryWriter()
-
     global_step = 0
+    best_reward = -np.inf  # used for saving best model based on episode reward
     
     for episode in range(nb_episodes):
         obs, _ = env.reset() # reset env to get first observeration
         state = obs_to_tensor(obs, device)  #preprocess obs to a tensor for network
-
         episode_reward = 0 # track episode reward for logging
-         
 
         for t in range(nb_steps):
             action = select_action(state, network, epsilon, nb_actions, device)
@@ -67,9 +63,6 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
             episode_reward += reward
             global_step += 1
 
-
-
-
             if len(buffer) >= batch_size:
                 minibatch = buffer.sample(batch_size)
                 states, actions, rewards, next_states, dones = zip(*minibatch)
@@ -80,22 +73,22 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
 
             
                 with torch.no_grad():
-                    y_j = rewards + gamma * torch.max(network(next_states), dim=1).values * (1 - dones)  #bellman eqeuation !
+                    y_j = rewards + gamma * torch.max(network(next_states), dim=1).values * (1 - dones)  #bellman eqeuation target, if state is terminal then zeroes out the future reward term
 
-                current_qs = network(states).gather(1, torch.LongTensor(actions).unsqueeze(1)) # get q values for all actions for the last state in the batch
+                current_qs = network(states).gather(1, torch.LongTensor(actions).unsqueeze(1)) #get Q value for each action taken in minibatch
                 loss = F.mse_loss(current_qs.squeeze(1), y_j) # compute loss between current q values and target q values
                 optimizer.zero_grad()
-                loss.backward() # backpropagate loss
+                loss.backward() 
                 optimizer.step() # update network parameters
                 writer.add_scalar("Loss/train", loss.item(), global_step)
 
-
-
             epsilon = max(epsilon_end, epsilon * epsilon_decay) # epsilon annealing
-        
             writer.add_scalar("Epsilon", epsilon, global_step)
 
         writer.add_scalar("Reward/episode", episode_reward, episode)
+        if episode_reward > best_reward:
+                best_reward = episode_reward
+                torch.save(network.state_dict(), "racecar_model.pt")
 
     writer.close()
 
@@ -109,7 +102,6 @@ if __name__ == "__main__":
     env = gym.wrappers.GrayscaleObservation(env)        
     env = gym.wrappers.FrameStackObservation(env, 4)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     network = DQNetwork(env.action_space.n).to(device)
 
@@ -123,4 +115,4 @@ if __name__ == "__main__":
         epsilon_start=1.0,
         epsilon_end=0.1,
         epsilon_decay=0.999995,
-        device=device)
+        device="cuda:0" if torch.cuda.is_available() else "cpu")
