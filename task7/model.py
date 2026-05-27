@@ -5,10 +5,7 @@ from collections import deque
 import torch.nn as nn
 import torch.nn.functional as F
 
-#1. DQNetwork class          ← the CNN
-# ReplayBuffer class       ← stores experience tuples
-# select_action function   ← epsilon-greedy logic
- # train function           ← the main loop (Algorithm 1)
+
 class DQNetwork(nn.Module):
     def __init__(self, nb_actions):
         super().__init__()
