@@ -7,6 +7,6 @@ This is a repo for the aiea lab auditing rl tasks. Each task can be found in it'
 - stablebase.yml shows ennviroment used
 
 ## Task 6 Notes
-- ppo.model and reward.png are the relevant files in task 6
 - ppo.model I made following an atari breakout implemtnation of the ppo model, then using gymnasium documentation I added adjustments for enviroment and tools
+- then with a better understanding I coded ppo.train, whcih dosen't follow the same tutorial structure
 - tensorboard logs are in runs
