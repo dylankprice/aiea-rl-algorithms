@@ -9,8 +9,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
-#PPO actor critic using equation 1 for actor and equation 9 for critic
-
+#Shared CNN for actor and critic
 class ActorCritic(nn.Module):
     def __init__(self, nb_actions):
         super().__init__()
@@ -20,6 +19,8 @@ class ActorCritic(nn.Module):
             nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),
             nn.Flatten(), nn.Linear(3136, 256), nn.ReLU(),
         )
+
+        #PPO actor critic
         self.actor = nn.Linear(256, nb_actions)
         self.critic = nn.Linear(256, 1)
 
