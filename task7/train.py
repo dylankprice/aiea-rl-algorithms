@@ -50,7 +50,7 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
     
     for episode in range(nb_episodes):
         obs, _ = env.reset() # reset env to get first observeration
-        state = obs_to_tensor(obs, device)  #preprocess obs to a tensor for network
+        state = obs_to_tensor(obs, 'cpu')  
         episode_reward = 0 # track episode reward for logging
 
         for t in range(nb_steps):
