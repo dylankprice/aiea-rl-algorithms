@@ -76,7 +76,7 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
                 with torch.no_grad():
                     y_j = rewards + gamma * torch.max(network(next_states), dim=1).values * (1 - dones)  #bellman eqeuation target, if state is terminal then zeroes out the future reward term
 
-                current_qs = network(states).gather(1, torch.LongTensor(actions).unsqueeze(1)) #get Q value for each action taken in minibatch
+                current_qs = network(states).gather(1, torch.LongTensor(actions).unsqueeze(1).to(device)) #get Q value for each action taken in minibatch
                 loss = F.mse_loss(current_qs.squeeze(1), y_j) # compute loss between current q values and target q values
                 optimizer.zero_grad()
                 loss.backward() 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayscaleObservation(env)        
     env = gym.wrappers.FrameStackObservation(env, 4)
-    
+
     network = DQNetwork(env.action_space.n).to(device)
 
     buffer = ReplayBuffer(capacity=1_000_000)
