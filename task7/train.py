@@ -54,11 +54,11 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
         episode_reward = 0 # track episode reward for logging
 
         for t in range(nb_steps):
-            action = select_action(state, network, epsilon, nb_actions, device)
+            action = select_action(state.to(device), network, epsilon, nb_actions, device)
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
-            next_state = obs_to_tensor(obs, device)
-            buffer.push(state, action, reward, next_state, done) # store experience in replay buffer
+            next_state = obs_to_tensor(obs, 'cpu')
+            buffer.push(state, action, reward, next_state, done)
             state = next_state
 
             episode_reward += reward
@@ -67,8 +67,8 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
             if len(buffer) >= batch_size:
                 minibatch = buffer.sample(batch_size)
                 states, actions, rewards, next_states, dones = zip(*minibatch)
-                states = torch.cat(states)
-                next_states = torch.cat(next_states)
+                states = torch.cat(states).to(device)
+                next_states = torch.cat(next_states).to(device)
                 rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
                 dones = torch.tensor(dones, dtype = torch.float32).to(device)
 
@@ -107,7 +107,7 @@ if __name__ == "__main__":
 
     network = DQNetwork(env.action_space.n).to(device)
 
-    buffer = ReplayBuffer(capacity=1_000_000)
+    buffer = ReplayBuffer(capacity=10_000)
 
     train(env, network, buffer, 
         nb_episodes=500,
