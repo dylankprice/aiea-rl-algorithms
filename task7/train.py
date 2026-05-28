@@ -110,11 +110,11 @@ if __name__ == "__main__":
     buffer = ReplayBuffer(capacity=1_000_000)
 
     train(env, network, buffer, 
-        nb_episodes=100,
-        nb_steps=100,
+        nb_episodes=500,
+        nb_steps=1000,
         batch_size=32,
         gamma=0.99,
         epsilon_start=1.0,
         epsilon_end=0.1,
-        epsilon_decay=0.999995,
-        device="cuda:0" if torch.cuda.is_available() else "cpu")
+        epsilon_decay=0.9999,
+        device= device)
