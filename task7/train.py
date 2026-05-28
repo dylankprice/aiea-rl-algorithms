@@ -86,7 +86,7 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
             epsilon = max(epsilon_end, epsilon * epsilon_decay) # epsilon annealing
             writer.add_scalar("Epsilon", epsilon, global_step)
 
-            print(f"Episode {episode}/{nb_episodes} | Reward: {episode_reward:.1f} | Epsilon: {epsilon:.3f} | Best: {best_reward:.1f}")
+        print(f"Episode {episode}/{nb_episodes} | Reward: {episode_reward:.1f} | Epsilon: {epsilon:.3f} | Best: {best_reward:.1f}")
 
         writer.add_scalar("Reward/episode", episode_reward, episode)
         if episode_reward > best_reward:
