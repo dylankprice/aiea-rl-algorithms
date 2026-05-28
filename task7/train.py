@@ -10,6 +10,7 @@ from model import DQNetwork
 from torch.utils.tensorboard import SummaryWriter
 
 
+device="cuda:0" if torch.cuda.is_available() else "cpu"
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -101,15 +102,14 @@ if __name__ == "__main__":
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayscaleObservation(env)        
     env = gym.wrappers.FrameStackObservation(env, 4)
-
-
+    
     network = DQNetwork(env.action_space.n).to(device)
 
     buffer = ReplayBuffer(capacity=1_000_000)
 
     train(env, network, buffer, 
-        nb_episodes=1000,
-        nb_steps=10000,
+        nb_episodes=100,
+        nb_steps=100,
         batch_size=32,
         gamma=0.99,
         epsilon_start=1.0,
