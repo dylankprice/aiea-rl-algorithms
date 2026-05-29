@@ -49,7 +49,7 @@ def collect_rollout(envs, actorcritic, current_obs, T, N):
             buf_acts[t]  = action        # store raw tanh, NOT action_env
             buf_lps[t]   = log_prob
             buf_vals[t]  = value
-            buf_rews[t]  = torch.tensor(reward * 0.1, dtype=torch.float32, device=device)  # scale rewards
+            buf_rews[t]  = torch.tensor(reward, dtype=torch.float32, device=device)  # scale rewards
             buf_dones[t] = torch.tensor(done, dtype=torch.float32, device=device)
 
         # last value for GAE bootstrap
@@ -72,9 +72,9 @@ def compute_advantages(buf_rews, buf_vals, buf_dones, T, gamma, gae_lambda):
 
 
 def train(envs, actorcritic,
-          T=512, K=4, batch_size=256,
+          T=256, K=4, batch_size=256,
           gamma=0.99, gae_lambda=0.95,
-          vf_coeff=0.5, ent_coeff=0.01,
+          vf_coeff=0.5, ent_coeff=0.02,
           clip_eps=0.2, nb_iterations=1500,
           lr=3e-4):
 
@@ -137,6 +137,7 @@ def train(envs, actorcritic,
 
         episode_reward = buf_rews.sum(0).mean().item()
         writer.add_scalar("Reward/iteration", episode_reward, iteration)
+        writer.flush()
 
         # log mean actions to verify gas/brake are in [0,1] and steering in [-1,1]
         writer.add_scalar("Actions/steer", buf_acts[:, :, 0].mean().item(), iteration)
