@@ -58,7 +58,7 @@ def train(env, network, buffer, nb_episodes, nb_steps, batch_size, gamma, epsilo
             obs, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             next_state = obs_to_tensor(obs, 'cpu')
-            buffer.push(state, action, reward, next_state, done)
+            buffer.push(state, action, np.clip(reward, -1, 1), next_state, done)
             state = next_state
 
             episode_reward += reward
@@ -116,5 +116,5 @@ if __name__ == "__main__":
         gamma=0.99,
         epsilon_start=1.0,
         epsilon_end=0.1,
-        epsilon_decay=0.9999,
+        epsilon_decay=0.99997,
         device= device)

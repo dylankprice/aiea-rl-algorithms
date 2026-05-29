@@ -21,8 +21,6 @@ class ActorCritic(nn.Module):
             nn.Flatten(), nn.Linear(2592, 256), nn.ReLU(),
         )
 
-        #PPO actor critic
-
         self.actor = nn.Linear(256, nb_actions)
         self.critic = nn.Linear(256, 1)
 
@@ -62,7 +60,7 @@ class Environments:
 
     def _make_env(self):
         env = gym.make("CarRacing-v3", render_mode="rgb_array",
-                       lap_complete_percent=0.95, domain_randomize=False, continuous=False)
+                       lap_complete_percent=0.95, domain_randomize=False, continuous=False) # discrete okay for training much faster results
         env = gym.wrappers.RecordEpisodeStatistics(env)   # This wrapper will keep track of cumulative rewards and episode lengths
         env = gym.wrappers.ResizeObservation(env, (84, 84))
         env = gym.wrappers.GrayscaleObservation(env)        
@@ -87,9 +85,6 @@ def PPO(envs, actorcritic, T=128, K=3, batch_size=256, gamma=0.99,
     N = len(envs)
     max_reward = -np.inf
     episode_rewards = []
-
-
-    smoothed = [] 
 
     for iteration in tqdm(range(nb_iterations)):
 
