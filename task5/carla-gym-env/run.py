@@ -1,53 +1,63 @@
-# This file is modified from <https://github.com/cjy1992/gym-carla.git>:
-# Copyright (c) 2019: Jianyu Chen (jianyuchen@berkeley.edu)
-# This work is licensed under the terms of the MIT license.
-# For a copy, see <https://opensource.org/licenses/MIT>.
-
 import gymnasium as gym
 import gym_carla
 import carla
 from stable_baselines3 import SAC
+from torch.utils.tensorboard import SummaryWriter #used for tensoboard logging
 
 def main():
-  # parameters for the gym_carla environment
-  params = {
-    'number_of_vehicles': 1,
-    'number_of_walkers': 0,
-    'display_size': 256,  # screen size of bird-eye render
-    'max_past_step': 1,  # the number of past steps to draw
-    'dt': 0.1,  # time interval between two frames
-    'discrete': False,  # whether to use discrete control space
-    'discrete_acc': [-3.0, 0.0, 3.0],  # discrete value of accelerations
-    'discrete_steer': [-0.2, 0.0, 0.2],  # discrete value of steering angles
-    'continuous_accel_range': [-3.0, 3.0],  # continuous acceleration range
-    'continuous_steer_range': [-0.3, 0.3],  # continuous steering angle range
-    'ego_vehicle_filter': 'vehicle.lincoln*',  # filter for defining ego vehicle
-    'port': 4000,  # connection port
-    'town': 'Town03',  # which town to simulate
-    'max_time_episode': 1000,  # maximum timesteps per episode
-    'max_waypt': 12,  # maximum number of waypoints
-    'obs_range': 32,  # observation range (meter)
-    'lidar_bin': 0.125,  # bin size of lidar sensor (meter)
-    'd_behind': 12,  # distance behind the ego vehicle (meter)
-    'out_lane_thres': 2.0,  # threshold for out of lane
-    'desired_speed': 8,  # desired speed (m/s)
-    'max_ego_spawn_times': 200,  # maximum times to spawn ego vehicle
-    'display_route': False,  # whether to render the desired route
-  }
+    params = {
+        'number_of_vehicles': 1,
+        'number_of_walkers': 0,
+        'display_size': 256,
+        'max_past_step': 1,
+        'dt': 0.1,
+        'discrete': False,
+        'discrete_acc': [-3.0, 0.0, 3.0],
+        'discrete_steer': [-0.2, 0.0, 0.2],
+        'continuous_accel_range': [-3.0, 3.0],
+        'continuous_steer_range': [-0.3, 0.3],
+        'ego_vehicle_filter': 'vehicle.lincoln*',
+        'port': 4000,
+        'town': 'Town03',
+        'max_time_episode': 1000,
+        'max_waypt': 12,
+        'obs_range': 32,
+        'lidar_bin': 0.125,
+        'd_behind': 12,
+        'out_lane_thres': 2.0,
+        'desired_speed': 8,
+        'max_ego_spawn_times': 200,
+        'display_route': False,
+    }
 
-  # Set gym-carla environment
-  env = gym.make('carla-v0', params=params)
+    env = gym.make('carla-v0', params=params)
+    model = SAC.load("SAC_dist")
 
-  model = SAC("MlpPolicy", env, device="cuda:1", buffer_size=20000, verbose=1, tensorboard_log="./tensorboard_DQN/")  
-  model = SAC.load("SAC_dist")
+    # Added a writer for eval logging
+    writer = SummaryWriter(log_dir="./tensorboard_EVAL/")
 
-  obs, info = env.reset()
-  
-  while True:
-    action, _states = model.predict(obs)
-    obs, reward, terminated, truncated, info = env.step(action)
-    if terminated or truncated:
-        obs, info = env.reset()
+    obs, info = env.reset()
+    episode = 0
+    episode_reward = 0
+    episode_steps = 0
+
+    while episode < 20:  # run 20 eval episodes
+        action, _states = model.predict(obs, deterministic=True)
+        obs, reward, terminated, truncated, info = env.step(action)
+        episode_reward += reward
+        episode_steps += 1
+
+        if terminated or truncated:
+            print(f"Episode {episode} | Reward: {episode_reward:.2f} | Steps: {episode_steps}")
+            writer.add_scalar("Eval/episode_reward", episode_reward, episode)
+            writer.add_scalar("Eval/episode_length", episode_steps, episode)
+            episode_reward = 0
+            episode_steps = 0
+            episode += 1
+            obs, info = env.reset()
+
+    writer.close()
+    env.close()
 
 if __name__ == '__main__':
-  main()
+    main()
