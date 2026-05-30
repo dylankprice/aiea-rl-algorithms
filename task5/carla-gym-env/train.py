@@ -5,6 +5,8 @@ import carla
 from stable_baselines3 import SAC
 from stable_baselines3 import DQN
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.callbacks import BaseCallback
+from torch.utils.tensorboard import SummaryWriter
 
 def main():
   params = {
@@ -45,12 +47,26 @@ def main():
     'display_route': True,  # whether to render the desired routes
   }
   env = Monitor(gym.make('carla-v1', params=params))
+  class TensorboardCallback(BaseCallback):
+      def __init__(self):
+          super().__init__()
+          self.writer = SummaryWriter(log_dir="./tensorboard_MANUAL/")
+
+      def _on_step(self):
+          reward = self.locals.get("rewards")
+          if reward is not None:
+              self.writer.add_scalar("Train/reward", float(reward.mean()), self.num_timesteps)
+          return True
+
+      def _on_training_end(self):
+          self.writer.close()
 
   save_name = "SAC_dist"
 
+
   model = SAC("MlpPolicy", env, device="cuda:0", buffer_size=5000, learning_starts=200,  verbose=1, tensorboard_log="./tensorboard_NEW/")
   
-  model.learn(total_timesteps=2500, log_interval=1)
+  model.learn(total_timesteps=2500, log_interval=1, callback=TensorboardCallback())
   model.save(save_name)
   
   print("Done Training")

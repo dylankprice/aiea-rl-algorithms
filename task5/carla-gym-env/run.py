@@ -17,7 +17,7 @@ def main():
         'continuous_accel_range': [-3.0, 3.0],
         'continuous_steer_range': [-0.3, 0.3],
         'ego_vehicle_filter': 'vehicle.lincoln*',
-        'port': 4000,
+        'port': 2000,
         'town': 'Town03',
         'max_time_episode': 1000,
         'max_waypt': 12,

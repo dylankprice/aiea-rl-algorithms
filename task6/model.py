@@ -10,18 +10,17 @@ class ActorCritic(nn.Module):
             nn.Conv2d(4, 32, 8, stride=4), nn.ReLU(),
             nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),
             nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),
-            nn.Flatten(), nn.Linear(4096, 256), nn.ReLU(),  # 4096 for 96x96 input
+            nn.Flatten(), nn.Linear(4096, 256), nn.ReLU(),  
         )
 
-        # Continuous actor: outputs mean for each action dimension
         self.actor_mean    = nn.Linear(256, nb_actions)
-        # log_std as a learned parameter (not input-dependent, simpler and stable)
+        
+
         self.actor_log_std = nn.Parameter(torch.zeros(nb_actions))
 
-        # Critic: scalar value estimate
+
         self.critic = nn.Linear(256, 1)
 
-        # Small init so policy starts near uniform
         nn.init.orthogonal_(self.actor_mean.weight, gain=0.01)
 
     def forward(self, x):
@@ -44,8 +43,6 @@ class ActorCritic(nn.Module):
         # log prob with tanh correction
         log_prob = (dist.log_prob(raw) - torch.log(1 - action.pow(2) + 1e-6)).sum(-1)
 
-        # action_env -> sent to environment
-        # action     -> stored in buffer for evaluate()
         return action_env, action, log_prob, value.squeeze(-1)
 
     def evaluate(self, x, action):

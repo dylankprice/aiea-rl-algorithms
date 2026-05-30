@@ -89,11 +89,14 @@ def train(envs, actorcritic,
     obs_np, _   = envs.reset()
     current_obs = obs_to_tensor(obs_np)
 
+    
     for iteration in range(nb_iterations):
         buf_obs, buf_acts, buf_lps, buf_vals, buf_rews, buf_dones, current_obs = \
             collect_rollout(envs, actorcritic, current_obs, T, N)
 
         advantages = compute_advantages(buf_rews, buf_vals, buf_dones, T, gamma, gae_lambda)
+
+        current_ent_coeff = ent_coeff * max(0.1, 1 - iteration / nb_iterations)
 
         flat_obs  = buf_obs.reshape(-1, 4, 96, 96)
         flat_acts = buf_acts.reshape(-1, 3)
@@ -123,7 +126,7 @@ def train(envs, actorcritic,
                     F.mse_loss(returns, v_clip, reduction='none')
                 ).mean()
 
-                loss = p_loss + vf_coeff * v_loss - ent_coeff * entropy.mean()
+                loss = p_loss + vf_coeff * v_loss - current_ent_coeff * entropy.mean()
 
                 optimizer.zero_grad()
                 loss.backward()
