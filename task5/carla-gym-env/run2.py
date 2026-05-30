@@ -8,7 +8,20 @@ import numpy as np
 def main():
     params = {
         'number_of_vehicles': 1,
+        'connection_timeout':120.0,
+        'weather': carla.WeatherParameters.ClearNoon,
+        'ego_vehicle_color': '0,255,115',
+        'spectator_height': 50,
+        'bev_params': {
+        'dim_x': '520',
+        'dim_y': '720',
+        'ego_bev_rgb': [0,0,255],
+        'height': 200,
+        'fov': '20',
+        'ego_bev_tag': 10
+        },
         'number_of_walkers': 0,
+        'connection_timeout': 120.0,
         'display_size': 256,
         'max_past_step': 1,
         'dt': 0.1,
