@@ -48,7 +48,7 @@ def main():
 
   save_name = "SAC_dist"
 
-  model = SAC("MlpPolicy", env, device="cpu", buffer_size=5000, learning_starts=500,  verbose=1, tensorboard_log="./tensorboard_NEW/")
+  model = SAC("MlpPolicy", env, device="cuda:0", buffer_size=5000, learning_starts=500,  verbose=1, tensorboard_log="./tensorboard_NEW/")
   
   model.learn(total_timesteps=2500, log_interval=1)
   model.save(save_name)
