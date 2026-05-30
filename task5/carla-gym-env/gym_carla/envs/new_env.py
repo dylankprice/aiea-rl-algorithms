@@ -936,11 +936,15 @@ class NewCarlaEnv(gym.Env):
         return np.float32(obs)
 
     def _get_reward(self):
-        """Calculate the step reward."""
         # reward for collision
         r_collision = -1
         if len(self.collision_hist) > 0:
             r_collision = -3
+
+        # speed reward - this is the missing piece
+        v = self.ego.get_velocity()
+        speed = np.sqrt(v.x**2 + v.y**2)
+        r_speed = -abs(speed - self.desired_speed)
 
         # reward for distance from A* path
         _, current_waypoint, curr_w_dist = get_closest_waypoint(
@@ -948,9 +952,7 @@ class NewCarlaEnv(gym.Env):
         )
         prev_w_dist = self.prev_w_dist
         self.prev_w_dist = curr_w_dist
-
         r_w_dist = 1
-
         if self.prev_waypoint.id == current_waypoint.id:
             r_w_dist = abs(prev_w_dist) - abs(curr_w_dist)
         else:
@@ -965,9 +967,8 @@ class NewCarlaEnv(gym.Env):
         self.prev_g_dist = curr_g_dist
         r_g_dist = abs(prev_g_dist) - abs(curr_g_dist)
 
-        r = (r_collision) + (r_w_dist * 20) + (r_g_dist * 10)
+        r = (r_collision) + (r_w_dist * 20) + (r_g_dist * 10) + (r_speed * 5)
         r = r * 10
-
         return r
 
     def _terminal(self):
