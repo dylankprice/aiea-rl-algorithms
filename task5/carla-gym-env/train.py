@@ -34,7 +34,7 @@ def main():
     'ego_vehicle_filter': 'vehicle.lincoln*',  # filter for defining ego vehicle
     'port': 2000,  # connection port
     'town': 'Town03',  # which town to simulate
-    'max_time_episode': 1000,  # maximum timesteps per episode
+    'max_time_episode': 200,  # maximum timesteps per episode
     'max_waypt': 12,  # maximum number of waypoints
     'obs_range': 32,  # observation range (meter)
     'lidar_bin': 0.125,  # bin size of lidar sensor (meter)
@@ -50,7 +50,7 @@ def main():
 
   model = SAC("MlpPolicy", env, device="cpu", buffer_size=5000, learning_starts=500,  verbose=1, tensorboard_log="./tensorboard_NEW/")
   
-  model.learn(total_timesteps=50000)
+  model.learn(total_timesteps=2500, log_interval=1)
   model.save(save_name)
   
   print("Done Training")
