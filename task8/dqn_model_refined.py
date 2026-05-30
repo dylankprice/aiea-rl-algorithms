@@ -13,7 +13,7 @@ class DQNetwork(nn.Module):
             nn.Conv2d(4, 32, 8, stride=4), nn.ReLU(),
             nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),
             nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),  #added 3rd cnn layer
-            nn.Flatten(), nn.Linear(5184, 256), nn.ReLU(),
+            nn.Flatten(), nn.Linear(3136, 256), nn.ReLU(),
         )
         self.fc = nn.Linear(256, nb_actions)
 
