@@ -21,7 +21,6 @@ def main():
         'ego_bev_tag': 10
         },
         'number_of_walkers': 0,
-        'connection_timeout': 120.0,
         'display_size': 256,
         'max_past_step': 1,
         'dt': 0.1,
@@ -54,15 +53,24 @@ def main():
         done = False
 
         while not done:
-            action = env.action_space.sample()  # random actions, no model needed
+            action = env.action_space.sample()
             obs, reward, terminated, truncated, info = env.step(action)
             episode_reward += reward
             episode_steps += 1
             done = terminated or truncated
+            
+            global_step = episode_steps + episode * 1000  # add this
+
+            
+            writer.add_scalar("Eval/reward", reward, episode_steps + episode * 1000)
+            writer.add_scalar("Eval/episode_reward_so_far", episode_reward, episode_steps + episode * 1000)
+            writer.add_scalar("Eval/throttle", action[0], global_step)
+            writer.add_scalar("Eval/brake", action[1], global_step)
+            writer.add_scalar("Eval/steer", action[2], global_step)
 
         print(f"Episode {episode} | Reward: {episode_reward:.2f}")
         writer.add_scalar("Eval/episode_reward", episode_reward, episode)
-        writer.add_scalar("Eval/episode_length", episode_steps, episode)
+
 
     writer.close()
     env.close()
