@@ -31,7 +31,7 @@ def main():
         'display_route': False,
     }
 
-    env = gym.make('carla-v0', params=params)
+    env = gym.make('carla-v1', params=params)
     writer = SummaryWriter(log_dir="./tensorboard_EVAL/")
 
     for episode in range(20):
