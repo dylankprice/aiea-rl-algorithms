@@ -168,6 +168,7 @@ class AStarNode:
         self.h_cost = h_cost
         self.f_cost = g_cost + h_cost
         self.parent = parent
+        
 
 
 def get_legal_neighbors(waypoint):
@@ -297,6 +298,7 @@ class NewCarlaEnv(gym.Env):
         self.number_of_vehicles = params["number_of_vehicles"]
         self.number_of_walkers  = params["number_of_walkers"]
         self.max_time_episode   = params["max_time_episode"]
+        self.desired_speed = params['desired_speed']
 
         self.action_space = spaces.Box(
             low=-1, high=1, shape=(3,), dtype=np.float32
