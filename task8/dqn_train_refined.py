@@ -119,10 +119,10 @@ if __name__ == "__main__":
 
     train(env, network, target_network, buffer, 
         nb_episodes=500,
-        nb_steps=2000,
+        nb_steps=1000,
         batch_size=32,
         gamma=0.99,
         epsilon_start=1.0,
         epsilon_end=0.05,
-        epsilon_decay=0.999985,
+        epsilon_decay=0.99997,
         device= device)
